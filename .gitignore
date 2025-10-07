@@ -1,0 +1,32 @@
+# Arquivos de teste (serão fornecidos separadamente)
+*.pdf
+modelo_planilha.*
+modelo.*
+
+# Arquivos de saída (podem ser recriados)
+output/*.xlsx
+output/*.xls
+output/*.ods
+output/*.csv
+resultado.*
+*.xlsx
+*.xls
+*.ods
+
+# Dependências
+node_modules/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sistemas operacionais
+.DS_Store
+Thumbs.db
+
