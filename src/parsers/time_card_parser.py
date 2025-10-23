@@ -68,7 +68,8 @@ class TimeCardParser(DocumentParser):
                         # apenas a data será adicionada
 
                         processed_data.append(row_data)
-
+            
+            if processed_data:
                 self.data_frame = pd.DataFrame(processed_data, columns=columns_headers)
                 return True
 
@@ -78,3 +79,5 @@ class TimeCardParser(DocumentParser):
         except Exception as e:
             print(f"Ocorreu um erro inesperado ao processar o arquivo '{self.input_path}': {e}")
             return False
+        
+        return False
