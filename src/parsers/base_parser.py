@@ -52,3 +52,5 @@ class DocumentParser(ABC):
         print(f"Processando arquivo: {self.input_path}")
         if self._extract_data():
             self._save_to_excel()
+        else:
+            print(f"Erro durante o processamento do arquivo: {self.input_path}")
