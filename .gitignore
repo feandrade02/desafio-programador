@@ -32,3 +32,9 @@ Thumbs.db
 
 # Imagens
 *.png
+
+# arquivo para verificação da estrutura das páginas PDF
+verify_tables.py
+
+# arquivo para gerar imagem de debug dos pdfs
+find_coords.py
