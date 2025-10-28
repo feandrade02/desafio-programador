@@ -1,8 +1,9 @@
 import pdfplumber
 import re
 import pandas as pd
+import pytesseract
 from parsers.base_parser import DocumentParser
-from utils.parse_values import parse_value
+from utils.my_functions import binarize_image, parse_value
 
 class PayrollParser(DocumentParser):
     def __init__(self, input_path: str, output_path: str):
@@ -14,8 +15,12 @@ class PayrollParser(DocumentParser):
         try:
             with pdfplumber.open(self.input_path) as pdf:
                 for page in pdf.pages:
-                    tables = page.extract_tables()
                     text = page.extract_text()
+
+                    if not text:
+                        return self._extract_with_ocr()
+
+                    tables = page.extract_tables()
 
                     if not tables or len(tables) < 3:
                         print(f"AVISO: Página pulada por não ter 3 tabelas. Tabelas encontradas: {len(tables)}")
@@ -85,7 +90,7 @@ class PayrollParser(DocumentParser):
                                 row_data[f"({code}) {description} QUANTIDADE"] = parse_value(values_found[0])
                                 row_data[f"({code}) {description} VALOR"] = parse_value(values_found[1])
                             else:
-                                row_data[f"({code}) {description} VALOR"] = None
+                                row_data[f"({code}) {description} VALOR"] = parse_value(values_found[0])
 
                     bottom_table = tables[2]
 
@@ -117,6 +122,129 @@ class PayrollParser(DocumentParser):
         except FileNotFoundError:
             print(f"Erro: O arquivo '{self.input_path}' não foi encontrado.")
             return False 
+        except Exception as e:
+            print(f"Ocorreu um erro inesperado ao processar o arquivo '{self.input_path}': {e}")
+            return False
+        
+        return False
+    
+    def _extract_with_ocr(self) -> bool:
+        processed_data = []
+
+        try:
+            with pdfplumber.open(self.input_path) as pdf:
+                for page in pdf.pages:
+                    img = page.to_image(resolution=300)
+                    pil_image = img.original
+                    processed_image = binarize_image(pil_image)
+
+                    ocr_extracted_text = pytesseract.image_to_string(processed_image, lang='por')
+
+                    if not ocr_extracted_text:
+                        print(f"AVISO: Página pulada por não ter texto extraído via OCR.")
+                        continue  # Pula páginas sem texto
+
+                    month_year_regex_pattern = r'Período : \s*(\d{2}/\d{4})'
+                    month_year_match = re.search(month_year_regex_pattern, ocr_extracted_text)
+                    if month_year_match:
+                        month_year_str = month_year_match.group(1)
+                    else:
+                        raise ValueError("Não foi possível encontrar o 'Mês/Ano' no PDF via OCR.")
+                    
+                    month_year = month_year_str.split(':')[-1].strip()
+
+                    print(f"\nMonth/Year: {month_year}\n")
+                    month, year = month_year.split('/')
+
+                    row_data = {
+                        'Ano': year.strip(),
+                        'Mês': month.strip()
+                    }
+
+                    base_code = '(0000)'
+
+                    base_inss_regex = r'Base I\.N\.8\.5\.\s*:\s*([\d.,]+)'
+                    base_inss_match = re.search(base_inss_regex, ocr_extracted_text)
+                    
+                    if base_inss_match:
+                        base_inss_value = base_inss_match.group(1).strip()
+                        column_header = f"{base_code} Base I.N.S.S."
+                        row_data[column_header] = parse_value(base_inss_value)
+
+                    month_fgts_regex = r'(F\.G\.T\.S\. do Mês\s*:\s*[\d.,]+)'
+                    month_fgts_match = re.search(month_fgts_regex, ocr_extracted_text)
+                    if month_fgts_match:
+                        month_fgts_str = month_fgts_match.group(1)
+                        print(f"\nMonth FGTS str: {month_fgts_str}\n")
+
+                        column_name, month_fgts_value = month_fgts_str.split(':')
+                        column_header = f"{base_code} {column_name.strip()}"
+                        row_data[column_header] = parse_value(month_fgts_value.strip())
+
+                    base_irrf_regex = r'(Base I\.R\.R\.F\.\s*:\s*[\d.,]+)'
+                    base_irrf_match = re.search(base_irrf_regex, ocr_extracted_text)
+                    if base_irrf_match:
+                        base_irrf_str = base_irrf_match.group(1)
+                        print(f"\nBase I.R.R.F. str: {base_irrf_str}\n")
+
+                        column_name, base_irrf_value = base_irrf_str.split(':')
+                        column_header = f"{base_code} {column_name.strip()}"
+                        row_data[column_header] = parse_value(base_irrf_value.strip())
+
+                    dep_irrf_regex = r'(Dep\. I\.R\.R\.F\.\s*:\s*[\d.,]+)'
+                    dep_irrf_match = re.search(dep_irrf_regex, ocr_extracted_text)
+                    if dep_irrf_match:
+                        dep_irrf_str = dep_irrf_match.group(1)
+                        print(f"\nDep I.R.R.F. str: {dep_irrf_str}\n")
+
+                        column_name, dep_irrf_value = dep_irrf_str.split(':')
+                        column_header = f"{base_code} {column_name.strip()}"
+                        row_data[column_header] = parse_value(dep_irrf_value.strip())
+
+                    base_fgts_regex = r'(Base FGTS\s*:\s*[\d.,]+)'
+                    base_fgts_match = re.search(base_fgts_regex, ocr_extracted_text)
+                    if base_fgts_match:
+                        base_fgts_str = base_fgts_match.group(1)
+                        print(f"\nBase FGTS str: {base_fgts_str}\n")
+
+                        column_name, base_fgts_value = base_fgts_str.split(':')
+                        column_header = f"{base_code} {column_name.strip()}"
+                        row_data[column_header] = parse_value(base_fgts_value.strip())
+
+                    all_rows_list = ocr_extracted_text.split('\n')
+
+                    regex_description_pattern = r'^[^|]+\s*\|?\s*(.+?)\s+(?=\b\d{1,3}(?:\.\d{3})*,\d{2}\b|\b\d+,\d{2}\b)'
+                    regex_value_pattern = r'\b\d{1,3}(?:\.\d{3})*,\d{2}\b|\b\d+,\d{2}\b'
+
+                    for row in all_rows_list:
+                        clean_row = row.strip()
+                        
+                        if clean_row.startswith('Total'):
+                            break
+
+                        if clean_row.startswith('Descrição') or not clean_row:
+                            continue
+
+                        code = clean_row.split('|')[0].strip()
+                        description_match = re.search(regex_description_pattern, clean_row)
+                        values_found = re.findall(regex_value_pattern, clean_row)
+
+                        if code and description_match:
+                            description = description_match.group(1).strip()
+                            
+                            count = len(values_found)
+                            if count == 2:
+                                row_data[f"({code}) {description} REFERENCIA"] = parse_value(values_found[0])
+                                row_data[f"({code}) {description} VALOR"] = parse_value(values_found[1])
+                            else:
+                                row_data[f"({code}) {description} VALOR"] = parse_value(values_found[0])
+
+                    processed_data.append(row_data)
+
+            if processed_data:
+                self.data_frame = pd.DataFrame(processed_data)
+                return True
+            
         except Exception as e:
             print(f"Ocorreu um erro inesperado ao processar o arquivo '{self.input_path}': {e}")
             return False
