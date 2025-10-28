@@ -59,7 +59,7 @@ Siga os passos abaixo para configurar o ambiente de desenvolvimento.
 1.  **Clone o Repositório**
 
     ```bash
-    git clone <URL_DO_SEU_REPOSITORIO>
+    git clone https://github.com/feandrade02/desafio-programador
     cd desafio-programador
     ```
 
