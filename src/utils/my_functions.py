@@ -1,4 +1,5 @@
 import re
+from PIL import Image
 
 def parse_value(text) -> float | None:
         """
@@ -18,3 +19,14 @@ def parse_value(text) -> float | None:
             return float(clean_value)
         except ValueError:
             return None
+
+def binarize_image(image: Image.Image, threshold: int = 180) -> Image.Image:
+    """Converte uma imagem do Pillow para preto e branco puro com base em um limiar."""
+    
+    # Converte para escala de cinza
+    grayscale_image = image.convert('L')
+    
+    # Aplica a binarização (thresholding)
+    # O modo '1' cria uma imagem de 1-bit, preto e branco.
+    binary_image = grayscale_image.point(lambda pixel: 0 if pixel < threshold else 255, '1')
+    return binary_image
